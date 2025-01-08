@@ -1,0 +1,55 @@
+#Consulta 10: Impacto de las canciones por número de reproducciones/streams
+Esta consulta es fundamental para entender la relevancia de las plataformas de streaming en la actualidad y su relación con el éxito comercial de las canciones. También puede usarse para comparar el impacto de la radio tradicional frente a los servicios de streaming.
+
+
+
+from pyspark.sql import SparkSession
+from dotenv import load_dotenv
+import os
+
+# Carga de las variables de entorno necesarias 
+APP_NAME = "Impacto_Canciones_Por_Numero_De_Reproducciones"
+
+load_dotenv()
+
+# Se configuran los directorios de entrada y salida
+INPUT_DIR = str(os.getenv("DATA_DIR"))
+OUTPUT_DIR = str(os.getenv("OUTPUT_DIR"))
+
+# Se realiza la creación la sesión de Spark
+spark = SparkSession.builder \
+    .appName(APP_NAME) \
+    .master("yarn") \
+    .getOrCreate()
+
+# Ruta de entrada y salida respectivamente 
+data_dir = INPUT_DIR
+output_dir = f"{OUTPUT_DIR}/{APP_NAME}/"
+
+# Se leen  los datos desde HDFS
+df = spark.read.option("header", "true") \
+    .option("delimiter", ",") \
+    .option("encoding", "latin1") \
+    .csv(data_dir)
+
+#Validación de las variables
+df = df.withColumn("REPRODUCCIONES", col("REPRODUCCIONES").cast("integer")) \
+       .withColumn("CANCION", col("CANCION").cast("string"))
+
+#Se procede a Agrupar por canción y calcular el total de reproducciones
+df_aggregated = df.groupBy("CANCION").agg(spark_sum("REPRODUCCIONES").alias("TOTAL_REPRODUCCIONES"))
+
+#Se ordenar los resultados por número de reproducciones 
+df_aggregated = df_aggregated.orderBy(col("TOTAL_REPRODUCCIONES"), ascending=False)
+
+#Se seleccionan las canciones con más reproduccionespara el top 10
+df_top_10 = df_aggregated.limit(10)
+
+#Se almacenan los resultados en HDFS
+df_top_10.write.mode("overwrite").option("header", "true").csv(output_dir)
+
+# Se muestran los resultados
+df_top_10.show(truncate=False)
+
+# Finaliza la sesión
+spark.stop()
