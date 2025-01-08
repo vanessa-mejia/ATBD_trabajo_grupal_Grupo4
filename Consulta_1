@@ -1,0 +1,65 @@
+#Consulta 1: Distribución de géneros musicales a lo largo del tiempo
+
+Esta consulta permite analizar la evolución de los géneros musicales, identificando las tendencias que dominaron en diferentes décadas. Es útil para entender los cambios culturales y sociales reflejados en la música a lo largo de los años.
+
+from pyspark.sql import SparkSession
+from dotenv import load_dotenv
+import os
+
+
+# Carga de las variables de entorno
+APP_NAME = "Distribucion_Generos_Musicales_Tiempo"
+
+
+load_dotenv()
+
+
+# Directorios de entrada y salida respectivamente
+INPUT_DIR = str(os.getenv("DATA_DIR"))
+OUTPUT_DIR = str(os.getenv("OUTPUT_DIR"))
+
+
+# Se crea la sesión de Spark para la consulta
+spark = SparkSession.builder \
+    .appName(APP_NAME) \
+    .master("yarn") \
+    .getOrCreate()
+
+
+# Ruta de entrada y salida
+data_dir = INPUT_DIR
+output_dir = f"{OUTPUT_DIR}/{APP_NAME}/"
+
+
+# Leer los datos desde HDFS
+df = spark.read.option("header", "true") \
+    .option("delimiter", ",") \
+    .option("encoding", "latin1") \
+    .csv(data_dir)
+
+
+# Se verifican los tipos de datos
+df = df.withColumn("AÑO", col("AÑO").cast("integer")) \
+       .withColumn("GENERO", col("GENERO").cast("string"))
+
+
+#Se agrupan por género y año, contando cuántas canciones pertenecen a cada género por año
+df_aggregated = df.groupBy("GENERO", "AÑO").count()
+
+
+# Se ordenan los resultados por año y género
+df_aggregated = df_aggregated.orderBy("AÑO", "GENERO")
+
+
+# Se almacenan los resultados en HDFS
+df_aggregated.write.mode("overwrite").option("header", "true").csv(output_dir)
+
+
+# Se Muestran los resultados
+df_aggregated.show(truncate=False)
+
+
+# Finalizar sesión para consulta 1
+spark.stop()
+
+
