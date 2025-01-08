@@ -1,0 +1,54 @@
+#Consulta 6: Top 10 de artistas más exitosos por número de éxitos
+Ayuda a identificar a los artistas más influyentes de cada época y permite un análisis profundo sobre su contribución a la industria musical.
+
+
+from pyspark.sql import SparkSession
+from dotenv import load_dotenv
+import os
+
+#Se procede con la carga de las variables de entorno
+APP_NAME = "Top_10_Artistas_Mas_Exitosos"
+
+load_dotenv()
+
+# Se validan los Directorios de entrada y salida
+INPUT_DIR = str(os.getenv("DATA_DIR"))
+OUTPUT_DIR = str(os.getenv("OUTPUT_DIR"))
+
+#  Se crea la sesión de Spark
+spark = SparkSession.builder \
+    .appName(APP_NAME) \
+    .master("yarn") \
+    .getOrCreate()
+
+# Configuración de las rutas de entrada y salida respectivamente
+data_dir = INPUT_DIR
+output_dir = f"{OUTPUT_DIR}/{APP_NAME}/"
+
+# Se leen los datos desde HDFS
+df = spark.read.option("header", "true") \
+    .option("delimiter", ",") \
+    .option("encoding", "latin1") \
+    .csv(data_dir)
+
+# Se confirman los tipos de datos
+df = df.withColumn("RANKING", col("RANKING").cast("integer")) \
+       .withColumn("ARTISTA", col("ARTISTA").cast("string"))
+
+#Se procede a agrupar por artista y contar cuántos éxitos (ranking) tiene cada uno
+df_aggregated = df.groupBy("ARTISTA").agg(spark_count("RANKING").alias("NUMERO_DE_EXITOS"))
+
+# Se ordenar los resultados por número de éxitos
+df_aggregated = df_aggregated.orderBy(col("NUMERO_DE_EXITOS"), ascending=False)
+
+# Se seelecciona los top 10 artistas
+df_top_10 = df_aggregated.limit(10)
+
+#Se procde a almacenar los resultados en HDFS
+df_top_10.write.mode("overwrite").option("header", "true").csv(output_dir)
+
+#Se muestran los resultados
+df_top_10.show(truncate=False)
+
+# Sesión finalizada
+spark.stop()
